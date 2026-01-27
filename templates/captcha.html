@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Validación CAPTCHA</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #121212;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .contenedor {
+            background: #1e1e1e;
+            padding: 30px;
+            border-radius: 10px;
+            width: 350px;
+            text-align: center;
+        }
+
+        .captcha {
+            font-size: 28px;
+            letter-spacing: 5px;
+            background: #333;
+            padding: 10px;
+            margin: 15px 0;
+            user-select: none;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 15px;
+            padding: 12px;
+            background: #00c853;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .error {
+            background: #ff5252;
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+
+        .exito {
+            background: #00c853;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 18px;
+        }
+        
+    </style>
+</head>
+<body>
+
+<div class="contenedor">
+<div class="breadcrumbs">
+    <a href="/">Inicio</a> &gt; <span>Captcha</span>
+</div>
+    {% if exito %}
+        <div class="exito">
+            ✔ Verificación correcta
+            <button><a href="/formulario">Registro</a></button>
+        </div>
+    {% else %}
+        <h2>Verificación CAPTCHA</h2>
+
+        <div class="captcha">{{ captcha }}</div>
+
+        <form method="POST">
+            <input type="text" name="captcha" placeholder="Escribe el captcha">
+            <button type="submit">Verificar</button>
+        </form>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+    {% endif %}
+    
+</div>
+
+</body>
+</html>

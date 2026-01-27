@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Formulario con Validación</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #1e1e1e;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .formulario {
+            background: #2c2c2c;
+            padding: 30px;
+            border-radius: 10px;
+            width: 400px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: none;
+        }
+
+        button {
+            margin-top: 20px;
+            width: 100%;
+            padding: 12px;
+            background: #00c853;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .error {
+            background: #ff5252;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .exito {
+            background: #00c853;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="formulario">
+    <div class="breadcrumbs">
+    <a href="/">Inicio</a> &gt; <span>Captcha>Formulario</span>
+</div>
+
+    {% if exito %}
+        <div class="exito">
+            ✔ Formulario enviado correctamente
+        </div>
+    {% else %}
+        <h2>Formulario de Registro</h2>
+
+        <form method="POST">
+            <input type="text" name="nombre" placeholder="Nombre"
+                value="{{ datos.nombre if datos }}"  required maxlength="20">
+
+            <input type="text" name="correo" placeholder="Correo electrónico"
+                value="{{ datos.correo if datos }}"  required maxlength="40">
+
+            <input type="password" name="password" placeholder="Contraseña" required maxlength="30">
+
+            <input type="password" name="confirmar" placeholder="Confirmar contraseña" required maxlength="30">
+
+            <button type="submit">Enviar</button>
+        </form>
+
+        {% for error in errores %}
+            <div class="error">{{ error }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <button><a href="/">Volver al menú</a></button>
+    
+</div>
+
+
+</body>
+</html>

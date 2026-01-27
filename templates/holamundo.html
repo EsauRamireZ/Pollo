@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Hola Mundo con BD</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #121212;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            background: #00c853;
+            border: none;
+            border-radius: 8px;
+            color: black;
+        }
+
+        .mensaje {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="breadcrumbs">
+    <a href="/">Inicio</a> &gt; <span>Hola Mundo</span>
+</div>
+    <h1>Hola Mundo 🌍</h1>
+
+    <form method="POST">
+        <button type="submit">Conectar a Base de Datos</button>
+    </form>
+
+    {% if mensaje %}
+        <div class="mensaje">{{ mensaje }}</div>
+    {% endif %}
+    <button><a href="/">Volver al menú</a></button>
+</body>
+</html>
