@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, session
+from flask import Flask, render_template, request, session, redirect
 import sqlite3
 import re
 import random
@@ -127,6 +127,115 @@ def captcha():
         exito=exito,
         breadcrumb=["Inicio", "Captcha" ]
     )
+
+
+# ---------------- LISTAR PRODUCTOS ----------------
+@app.route("/productos")
+def productos():
+
+    pagina = request.args.get("pagina", 1, type=int)
+    por_pagina = 5
+
+    conexion = conectar_db()
+    cursor = conexion.cursor()
+
+    # Contar total de productos
+    cursor.execute("SELECT COUNT(*) FROM productos")
+    total_productos = cursor.fetchone()[0]
+
+    total_paginas = (total_productos + por_pagina - 1) // por_pagina
+
+    offset = (pagina - 1) * por_pagina
+
+    cursor.execute(
+        "SELECT * FROM productos LIMIT ? OFFSET ?",
+        (por_pagina, offset)
+    )
+
+    productos = cursor.fetchall()
+
+    conexion.close()
+
+    return render_template(
+        "productos.html",
+        productos=productos,
+        pagina=pagina,
+        total_paginas=total_paginas,
+        total_productos=total_productos
+    )
+
+# ---------------- AGREGAR PRODUCTO ----------------
+@app.route("/agregar_producto", methods=["GET","POST"])
+def agregar_producto():
+
+    if request.method == "POST":
+
+        nombre = request.form["nombre"]
+        precio = request.form["precio"]
+        stock = request.form["stock"]
+        descripcion = request.form["descripcion"]
+
+        conexion = conectar_db()
+        cursor = conexion.cursor()
+
+        cursor.execute("""
+        INSERT INTO productos(nombre,precio,stock,descripcion)
+        VALUES (?,?,?,?)
+        """,(nombre,precio,stock,descripcion))
+
+        conexion.commit()
+        conexion.close()
+
+        return redirect("/productos")
+
+    return render_template("agregar_producto.html")
+
+# ---------------- ELIMINAR ----------------
+@app.route("/eliminar/<int:id>")
+def eliminar(id):
+
+    conexion = conectar_db()
+    cursor = conexion.cursor()
+
+    cursor.execute("DELETE FROM productos WHERE id=?",(id,))
+
+    conexion.commit()
+    conexion.close()
+
+    return redirect("/productos")
+
+# ---------------- EDITAR ----------------
+@app.route("/editar/<int:id>", methods=["GET","POST"])
+def editar(id):
+
+    conexion = conectar_db()
+    cursor = conexion.cursor()
+
+    if request.method == "POST":
+
+        nombre = request.form["nombre"]
+        precio = request.form["precio"]
+        stock = request.form["stock"]
+        descripcion = request.form["descripcion"]
+
+        cursor.execute("""
+        UPDATE productos
+        SET nombre=?, precio=?, stock=?, descripcion=?
+        WHERE id=?
+        """,(nombre,precio,stock,descripcion,id))
+
+        conexion.commit()
+        conexion.close()
+
+        return redirect("/productos")
+
+    cursor.execute("SELECT * FROM productos WHERE id=?",(id,))
+    producto = cursor.fetchone()
+
+    conexion.close()
+
+    return render_template("editar_producto.html", producto=producto)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
