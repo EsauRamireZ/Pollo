@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+<meta charset="UTF-8">
+<title>Productos</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<!-- Breadcrumb -->
+<div style="padding:15px;">
+<a href="/">Inicio</a> / <b>Productos</b>
+</div>
+
+<!-- Header -->
+<div class="header">
+
+<h2>Gestión de Productos</h2>
+
+<a href="/agregar_producto" class="btn-agregar">
+Agregar Producto
+</a>
+
+</div>
+
+<!-- Barra búsqueda -->
+<div class="search-bar">
+
+
+
+</div>
+
+<!-- Tabla -->
+
+<table>
+
+<thead>
+
+<tr>
+<th>Nombre</th>
+<th>Precio</th>
+<th>Stock</th>
+<th>Descripción</th>
+<th>Acciones</th>
+</tr>
+
+</thead>
+
+<tbody>
+
+{% for p in productos %}
+
+<tr>
+
+<td>{{p[1]}}</td>
+<td>${{p[2]}}</td>
+<td>{{p[3]}}</td>
+<td>{{p[4]}}</td>
+
+<td>
+
+<a href="/editar/{{p[0]}}" class="btn-editar">
+Editar
+</a>
+
+<a href="/eliminar/{{p[0]}}" class="btn-eliminar">
+Eliminar
+</a>
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+<div class="paginacion">
+
+<p>
+Página {{pagina}} de {{total_paginas}} ({{total_productos}} productos)
+</p>
+
+<div class="paginas">
+
+{% if pagina > 1 %}
+<a href="/productos?pagina={{pagina-1}}">«</a>
+{% endif %}
+
+{% for p in range(1, total_paginas + 1) %}
+
+<a href="/productos?pagina={{p}}"
+class="{% if p == pagina %}activa{% endif %}">
+{{p}}
+</a>
+
+{% endfor %}
+
+{% if pagina < total_paginas %}
+<a href="/productos?pagina={{pagina+1}}">»</a>
+{% endif %}
+
+</div>
+
+</div>
+
+</div>
+
+</body>
+</html>
