@@ -3,17 +3,14 @@ import sqlite3
 import re
 import random
 import string
-import os
 
 app = Flask(__name__)
 app.secret_key = "clave_secreta"
 
-DATABASE = os.path.join(os.getcwd(), "tienda.db")
 
-conexion = sqlite3.connect(DATABASE)
 # Función para conectar a la base de datos
 def conectar_db():
-    return sqlite3.connect("database.db")
+    return sqlite3.connect("tienda.db")
 
 # Generar captcha
 def generar_captcha():
