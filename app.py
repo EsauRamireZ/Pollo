@@ -4,17 +4,15 @@ import re
 import random
 import string
 import os
+import psycopg2
 
 app = Flask(__name__)
 app.secret_key = "clave_secreta"
 
-DATABASE = os.path.join(os.getcwd(), "tienda.db")
-
-conexion = sqlite3.connect(DATABASE)
 # Función para conectar a la base de datos
 def conectar_db():
-    return sqlite3.connect("database.db")
-
+    database_url = os.getenv("DATABASE_URL")
+    return psycopg2.connect(database_url)
 # Generar captcha
 def generar_captcha():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
@@ -153,7 +151,7 @@ def productos():
     offset = (pagina - 1) * por_pagina
 
     cursor.execute(
-        "SELECT * FROM productos LIMIT ? OFFSET ?",
+        "SELECT * FROM productos LIMIT %s OFFSET %s",
         (por_pagina, offset)
     )
 
@@ -185,7 +183,7 @@ def agregar_producto():
 
         cursor.execute("""
         INSERT INTO productos(nombre,precio,stock,descripcion)
-        VALUES (?,?,?,?)
+        VALUES (%s,%s,%s,%s)
         """,(nombre,precio,stock,descripcion))
 
         conexion.commit()
@@ -202,7 +200,7 @@ def eliminar(id):
     conexion = conectar_db()
     cursor = conexion.cursor()
 
-    cursor.execute("DELETE FROM productos WHERE id=?",(id,))
+    cursor.execute("DELETE FROM productos WHERE id=%s",(id,))
 
     conexion.commit()
     conexion.close()
@@ -225,8 +223,8 @@ def editar(id):
 
         cursor.execute("""
         UPDATE productos
-        SET nombre=?, precio=?, stock=?, descripcion=?
-        WHERE id=?
+        SET nombre=%s, precio=%s, stock=%s, descripcion=%s
+        WHERE id=%s
         """,(nombre,precio,stock,descripcion,id))
 
         conexion.commit()
@@ -234,7 +232,7 @@ def editar(id):
 
         return redirect("/productos")
 
-    cursor.execute("SELECT * FROM productos WHERE id=?",(id,))
+    cursor.execute("SELECT * FROM productos WHERE id=%s",(id,))
     producto = cursor.fetchone()
 
     conexion.close()
