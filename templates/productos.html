@@ -1,55 +1,216 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-
 <meta charset="UTF-8">
 <title>Productos</title>
 
-<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
+<style>
+
+:root{
+--green:#2e7d32;
+--green2:#43a047;
+--blue:#0b3a66;
+--border:#d9e2ef;
+--bg:#f4f7f9;
+--text:#2d3436;
+--muted:#6b7280;
+}
+
+body{
+font-family:Arial;
+background:var(--bg);
+margin:0;
+padding:20px;
+}
+
+.container{
+background:white;
+border:1px solid var(--border);
+border-radius:10px;
+padding:20px;
+}
+
+h2{
+margin-top:0;
+}
+
+.filters{
+display:flex;
+gap:15px;
+flex-wrap:wrap;
+margin-bottom:20px;
+}
+
+.filters input,
+.filters select{
+height:35px;
+border:1px solid var(--border);
+border-radius:4px;
+padding:0 10px;
+}
+
+.btn{
+background:var(--green2);
+border:none;
+color:white;
+padding:8px 15px;
+border-radius:4px;
+cursor:pointer;
+text-decoration:none;
+}
+
+.btn:hover{
+opacity:.9;
+}
+
+.btn-outline{
+background:white;
+border:1px solid var(--border);
+color:black;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:15px;
+}
+
+thead th{
+background:var(--blue);
+color:white;
+padding:10px;
+}
+
+tbody td{
+padding:10px;
+border-top:1px solid var(--border);
+text-align:center;
+}
+
+tbody tr:nth-child(even){
+background:#fafcff;
+}
+
+.badge{
+padding:5px 10px;
+border-radius:20px;
+font-size:12px;
+font-weight:bold;
+}
+
+.activo{
+background:#e8f5e9;
+color:#1b5e20;
+}
+
+.inactivo{
+background:#eee;
+color:#444;
+}
+
+.icon-btn{
+border:none;
+background:white;
+cursor:pointer;
+font-size:16px;
+}
+
+.icon-btn:hover{
+color:red;
+}
+
+/* ===== PAGINACION ===== */
+
+.pagination-container{
+margin-top:25px;
+text-align:center;
+}
+
+.pagination-info{
+font-weight:bold;
+margin-bottom:10px;
+}
+
+.pagination{
+display:flex;
+justify-content:center;
+gap:8px;
+flex-wrap:wrap;
+}
+
+.pagination a{
+padding:8px 14px;
+border:1px solid var(--border);
+border-radius:8px;
+text-decoration:none;
+color:var(--text);
+background:white;
+}
+
+.pagination a:hover{
+border-color:var(--green);
+}
+
+.pagination .active{
+background:var(--green);
+color:white;
+border-color:var(--green);
+}
+
+.pagination .disabled{
+opacity:0.4;
+pointer-events:none;
+}
+
+</style>
 </head>
 
 <body>
 
 <div class="container">
 
-<!-- Breadcrumb -->
-<div style="padding:15px;">
-<a href="/">Inicio</a> / <b>Productos</b>
-</div>
+<h2>Productos</h2>
 
-<!-- Header -->
-<div class="header">
+<form class="filters" method="GET">
 
-<h2>Gestión de Productos</h2>
+<input type="text" name="q" placeholder="Buscar producto"
+value="{{ request.args.get('q','') }}">
 
-<a href="/agregar_producto" class="btn-agregar">
-Agregar Producto
+<select name="estado">
+<option value="">Todos</option>
+<option value="1">Activo</option>
+<option value="0">Inactivo</option>
+</select>
+
+<input type="number" name="min_price" placeholder="Precio min"
+value="{{ request.args.get('min_price','') }}">
+
+<input type="number" name="max_price" placeholder="Precio max"
+value="{{ request.args.get('max_price','') }}">
+
+<button class="btn">Buscar</button>
+
+<a href="{{ url_for('productos_list') }}" class="btn btn-outline">Limpiar</a>
+
+</form>
+
+<a class="btn" href="{{ url_for('productos_nuevo') }}">
+<i class="fa fa-plus"></i> Nuevo producto
 </a>
-
-</div>
-
-<!-- Barra búsqueda -->
-<div class="search-bar">
-
-
-
-</div>
-
-<!-- Tabla -->
 
 <table>
 
 <thead>
-
 <tr>
 <th>Nombre</th>
 <th>Precio</th>
 <th>Stock</th>
-<th>Descripción</th>
-<th>Acciones</th>
+<th>Estado</th>
+<th>Editar</th>
+<th>Eliminar</th>
 </tr>
-
 </thead>
 
 <tbody>
@@ -58,20 +219,44 @@ Agregar Producto
 
 <tr>
 
-<td>{{p[1]}}</td>
-<td>${{p[2]}}</td>
-<td>{{p[3]}}</td>
-<td>{{p[4]}}</td>
+<td style="text-align:left">
+<strong>{{ p['nombre'] }}</strong><br>
+<span style="color:var(--muted);font-size:12px">
+{{ p['descripcion'] }}
+</span>
+</td>
+
+<td>${{ '%.2f'|format(p['precio']) }}</td>
+
+<td>{{ p['stock'] }}</td>
 
 <td>
 
-<a href="/editar/{{p[0]}}" class="btn-editar">
-Editar
-</a>
+{% if p['activo']==1 %}
+<span class="badge activo">Activo</span>
+{% else %}
+<span class="badge inactivo">Inactivo</span>
+{% endif %}
 
-<a href="/eliminar/{{p[0]}}" class="btn-eliminar">
-Eliminar
+</td>
+
+<td>
+<a href="{{ url_for('productos_editar', producto_id=p['id']) }}">
+<i class="fa fa-pen icon-btn"></i>
 </a>
+</td>
+
+<td>
+
+<form method="POST"
+action="{{ url_for('productos_eliminar', producto_id=p['id']) }}"
+onsubmit="return confirm('Eliminar producto?')">
+
+<button class="icon-btn">
+<i class="fa fa-trash"></i>
+</button>
+
+</form>
 
 </td>
 
@@ -83,30 +268,35 @@ Eliminar
 
 </table>
 
-<div class="paginacion">
 
-<p>
-Página {{pagina}} de {{total_paginas}} ({{total_productos}} productos)
-</p>
+<!-- PAGINACION -->
 
-<div class="paginas">
+<div class="pagination-container">
 
-{% if pagina > 1 %}
-<a href="/productos?pagina={{pagina-1}}">«</a>
-{% endif %}
+<div class="pagination-info">
+Página {{ page }} de {{ total_pages }} — {{ total }} registros
+</div>
 
-{% for p in range(1, total_paginas + 1) %}
+<div class="pagination">
 
-<a href="/productos?pagina={{p}}"
-class="{% if p == pagina %}activa{% endif %}">
-{{p}}
-</a>
+<a class="{% if page<=1 %}disabled{% endif %}"
+href="{{ url_for('productos_list',page=1) }}">Primera</a>
+
+<a class="{% if page<=1 %}disabled{% endif %}"
+href="{{ url_for('productos_list',page=page-1) }}">Anterior</a>
+
+{% for i in range(1,total_pages+1) %}
+
+<a class="{% if i==page %}active{% endif %}"
+href="{{ url_for('productos_list',page=i) }}">{{ i }}</a>
 
 {% endfor %}
 
-{% if pagina < total_paginas %}
-<a href="/productos?pagina={{pagina+1}}">»</a>
-{% endif %}
+<a class="{% if page>=total_pages %}disabled{% endif %}"
+href="{{ url_for('productos_list',page=page+1) }}">Siguiente</a>
+
+<a class="{% if page>=total_pages %}disabled{% endif %}"
+href="{{ url_for('productos_list',page=total_pages) }}">Última</a>
 
 </div>
 
