@@ -1,244 +1,458 @@
-from flask import Flask, render_template, request, session, redirect
+# app.py
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 import sqlite3
-import re
-import random
-import string
 import os
-import psycopg2
+import requests
+import re
+from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = "clave_secreta"
+app.secret_key = 'clave_secreta_super_segura_2026'
 
-# Función para conectar a la base de datos
-def conectar_db():
-    database_url = os.getenv("DATABASE_URL")
-    return psycopg2.connect(database_url)
-# Generar captcha
-def generar_captcha():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+# ==================== CONFIGURACIÓN reCAPTCHA ====================
+RECAPTCHA_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
+RECAPTCHA_SECRET_KEY = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+# ==================== SQLITE (ruta absoluta recomendada) ====================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.path.join(BASE_DIR, "usuarios.db")
 
-# Ruta principal
-@app.route("/holamundo", methods=["GET", "POST"])
-def hola():
-    mensaje = ""
-    if request.method == "POST":
+def get_connection():
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        print(f"Error conectando a SQLite: {e}")
+        return None
+
+def require_login():
+    if 'user_id' not in session:
+        flash('Inicia sesión primero', 'warning')
+        return False
+    return True
+
+# ==================== INICIALIZACIÓN DB ====================
+def init_db():
+    try:
+        conn = get_connection()
+        if conn:
+            cur = conn.cursor()
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS productos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    descripcion TEXT,
+                    precio REAL NOT NULL,
+                    stock INTEGER NOT NULL DEFAULT 0,
+                    activo INTEGER NOT NULL DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME
+                )
+            """)
+
+            conn.commit()
+            conn.close()
+            print("✅ DB lista (usuarios + productos)")
+    except Exception as e:
+        print(f"Error inicializando DB: {e}")
+
+# ✅ IMPORTANTE PARA RENDER/GUNICORN
+init_db()
+
+# ==================== reCAPTCHA ====================
+def verificar_recaptcha(respuesta_recaptcha):
+    try:
+        data = {'secret': RECAPTCHA_SECRET_KEY, 'response': respuesta_recaptcha}
+        r = requests.post('https://www.google.com/recaptcha/api/siteverify', data=data, timeout=5)
+        return r.json().get('success', False)
+    except:
+        return False
+
+# ==================== AUTH ====================
+@app.route('/')
+def inicio():
+    return render_template('inicio.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+
         try:
-            conexion = conectar_db()
-            cursor = conexion.cursor()
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute('SELECT id, nombre, password FROM usuarios WHERE email = ?', (email,))
+            user = cur.fetchone()
+            conn.close()
 
-            # Ejemplo de consulta
-            cursor.execute("SELECT sqlite_version();")
-            version = cursor.fetchone()
+            if user and check_password_hash(user['password'], password):
+                session['user_id'] = user['id']
+                session['user_name'] = user['nombre']
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Email o contraseña incorrectos', 'danger')
+        except Exception as e:
+            flash(f'Error en el sistema: {str(e)}', 'danger')
 
-            conexion.close()
-            mensaje = f"Conexión exitosa a SQL versión: {version[0]}"
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '')
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        recaptcha_response = request.form.get('g-recaptcha-response', '')
+
+        if not verificar_recaptcha(recaptcha_response):
+            flash('Por favor, completa el reCAPTCHA', 'danger')
+            return redirect(url_for('register'))
+
+        errores = []
+
+        if not nombre or len(nombre.strip()) < 3:
+            errores.append('El nombre debe tener al menos 3 letras reales.')
+        elif not re.match(r"^[A-Za-zñÑáéíóúÁÉÍÓÚ\s]+$", nombre):
+            errores.append('El nombre solo puede contener letras.')
+
+        email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if not re.match(email_regex, email):
+            errores.append('Ingresa un correo válido.')
+
+        password_regex = r"^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,20}$"
+        if not re.match(password_regex, password):
+            errores.append('La contraseña debe tener: 8-20 caracteres, Mayúscula, Minúscula y Número.')
+
+        if password != confirm_password:
+            errores.append('Las contraseñas no coinciden.')
+
+        if errores:
+            for e in errores:
+                flash(e, 'danger')
+            return redirect(url_for('register'))
+
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+
+            cur.execute('SELECT id FROM usuarios WHERE email = ?', (email,))
+            if cur.fetchone():
+                conn.close()
+                flash('Este correo ya está registrado', 'danger')
+                return redirect(url_for('register'))
+
+            hashed_pw = generate_password_hash(password)
+            cur.execute(
+                'INSERT INTO usuarios (nombre, email, password) VALUES (?, ?, ?)',
+                (nombre.strip(), email, hashed_pw)
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+            conn.close()
+
+            session['user_id'] = new_id
+            session['user_name'] = nombre.strip()
+            flash(f'¡Bienvenido {nombre.strip()}! Cuenta creada.', 'success')
+            return redirect(url_for('dashboard'))
 
         except Exception as e:
-            mensaje = f"Error de conexión: {e}"
+            flash(f'Error al registrar: {str(e)}', 'danger')
 
-    return render_template("holamundo.html", mensaje=mensaje,breadcrumb=["Inicio", "Captcha", "Formulario"])
+    return render_template('register.html', recaptcha_site_key=RECAPTCHA_SITE_KEY)
 
-@app.route("/formulario", methods=["GET", "POST"])
-def formulario():
-    errores = []
-    datos = {}
+@app.route('/dashboard')
+def dashboard():
+    if not require_login():
+        return redirect(url_for('login'))
 
-    if request.method == "POST":
-        nombre = request.form.get("nombre", "").strip()
-        correo = request.form.get("correo", "").strip()
-        password = request.form.get("password", "")
-        confirmar = request.form.get("confirmar", "")
+    total_productos = 0
+    productos_activos = 0
+    total_stock = 0
 
-        datos = {
-            "nombre": nombre,
-            "correo": correo
-        }
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
 
-        # 🔴 Campos obligatorios
-        if not nombre:
-            errores.append("Campo vacío")
+        cur.execute("SELECT COUNT(*) AS c FROM productos")
+        total_productos = cur.fetchone()['c']
 
-        # 🔴 Nombre y apellido: solo letras y acentos
-        patron_nombre = r"^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
-        if nombre and not re.match(patron_nombre, nombre):
-            errores.append("Nombre incorrecto escribe uno valido")
+        cur.execute("SELECT COUNT(*) AS c FROM productos WHERE activo=1")
+        productos_activos = cur.fetchone()['c']
 
-        if not correo:
-            errores.append("Campo vacío")
-        
-        # 🔴 Correo
-        patron_correo = r"^[\w\.-]+@[\w\.-]+\.\w+$"
-        if correo and not re.match(patron_correo, correo):
-            errores.append("Correo incorrecto")
+        cur.execute("SELECT IFNULL(SUM(stock),0) AS s FROM productos")
+        total_stock = cur.fetchone()['s']
 
-        # 🔴 Longitud máxima (40 caracteres)
-        if len(nombre) > 40 or len(correo) > 40 or len(password) > 40 or len(confirmar) > 40:
-            errores.append("Máximo 40 caracteres permitidos")
-        
-        
-        if not password:
-            errores.append("Campo vacío")
-        # 🔴 Contraseña incorrecta
-        patron_password = r"^(?=.*[A-Z])(?=.*\d).{8,}$"
-        if password and not re.match(patron_password, password):
-            errores.append("Contraseña incorrecta, debe incluir minimo 8 caracteres, una malluscula y un numero")
-
-        if not confirmar:
-            errores.append("Campo vacío")
-        # 🔴 Confirmación
-        if password and confirmar and password != confirmar:
-            errores.append("Las contraseñas no coinciden")
-
-        # ✅ Sin errores
-        if not errores:
-            return render_template("formulario.html", exito=True)
+        conn.close()
+    except:
+        pass
 
     return render_template(
-        "formulario.html",
-        errores=errores,
-        datos=datos,
-        breadcrumb=["Inicio", "Captcha", "Formulario"]
+        'dashboard.html',
+        nombre=session['user_name'],
+        total_productos=total_productos,
+        productos_activos=productos_activos,
+        total_stock=total_stock
     )
 
-@app.route("/captcha", methods=["GET", "POST"])
-def captcha():
-    error = ""
-    exito = False
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('Sesión cerrada', 'info')
+    return redirect(url_for('inicio'))
 
-    if request.method == "POST":
-        captcha_usuario = request.form.get("captcha", "").strip()
-        captcha_real = session.get("captcha")
+# ==================== PRODUCTOS (LISTA CON PAGINACIÓN) ====================
+@app.route('/productos')
+def productos_list():
+    if not require_login():
+        return redirect(url_for('login'))
 
-        if not captcha_usuario:
-            error = "Campo vacío"
-        elif captcha_usuario != captcha_real:
-            error = "Captcha incorrecto"
-        else:
-            exito = True
+    # Filtros
+    q = request.args.get('q', '').strip()
+    estado = request.args.get('estado', '').strip()
+    min_price = request.args.get('min_price', '').strip()
+    max_price = request.args.get('max_price', '').strip()
 
-    # Generar nuevo captcha
-    session["captcha"] = generar_captcha()
+    # Paginación
+    try:
+        page = int(request.args.get('page', '1'))
+        if page < 1:
+            page = 1
+    except:
+        page = 1
 
-    return render_template(
-        "captcha.html",
-        captcha=session["captcha"],
-        error=error,
-        exito=exito,
-        breadcrumb=["Inicio", "Captcha" ]
-    )
+    PER_PAGE = 6
+    offset = (page - 1) * PER_PAGE
 
+    where = " WHERE 1=1 "
+    params = []
 
-# ---------------- LISTAR PRODUCTOS ----------------
-@app.route("/productos")
-def productos():
+    if q:
+        where += " AND nombre LIKE ? "
+        params.append(f"%{q}%")
 
-    pagina = request.args.get("pagina", 1, type=int)
-    por_pagina = 5
+    if estado in ('0', '1'):
+        where += " AND activo = ? "
+        params.append(int(estado))
 
-    conexion = conectar_db()
-    cursor = conexion.cursor()
+    if min_price:
+        try:
+            where += " AND precio >= ? "
+            params.append(float(min_price))
+        except:
+            pass
 
-    # Contar total de productos
-    cursor.execute("SELECT COUNT(*) FROM productos")
-    total_productos = cursor.fetchone()[0]
+    if max_price:
+        try:
+            where += " AND precio <= ? "
+            params.append(float(max_price))
+        except:
+            pass
 
-    total_paginas = (total_productos + por_pagina - 1) // por_pagina
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
 
-    offset = (pagina - 1) * por_pagina
+        # Total registros
+        cur.execute("SELECT COUNT(*) AS c FROM productos" + where, params)
+        total = cur.fetchone()['c']
 
-    cursor.execute(
-        "SELECT * FROM productos LIMIT %s OFFSET %s",
-        (por_pagina, offset)
-    )
+        total_pages = (total + PER_PAGE - 1) // PER_PAGE
+        if total_pages == 0:
+            total_pages = 1
 
-    productos = cursor.fetchall()
+        if page > total_pages:
+            page = total_pages
+            offset = (page - 1) * PER_PAGE
 
-    conexion.close()
+        query = """
+            SELECT id, nombre, descripcion, precio, stock, activo
+            FROM productos
+        """ + where + """
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+        """
 
-    return render_template(
-        "productos.html",
-        productos=productos,
-        pagina=pagina,
-        total_paginas=total_paginas,
-        total_productos=total_productos
-    )
+        cur.execute(query, params + [PER_PAGE, offset])
+        productos = cur.fetchall()
+        conn.close()
 
-# ---------------- AGREGAR PRODUCTO ----------------
-@app.route("/agregar_producto", methods=["GET","POST"])
-def agregar_producto():
+        return render_template(
+            'productos.html',
+            productos=productos,
+            nombre=session.get('user_name', ''),
+            page=page,
+            total_pages=total_pages,
+            total=total
+        )
 
-    if request.method == "POST":
+    except Exception as e:
+        flash(f'Error cargando productos: {str(e)}', 'danger')
+        return redirect(url_for('dashboard'))
 
-        nombre = request.form["nombre"]
-        precio = request.form["precio"]
-        stock = request.form["stock"]
-        descripcion = request.form["descripcion"]
+# ==================== PRODUCTOS (NUEVO) ====================
+@app.route('/productos/nuevo', methods=['GET', 'POST'])
+def productos_nuevo():
+    if not require_login():
+        return redirect(url_for('login'))
 
-        conexion = conectar_db()
-        cursor = conexion.cursor()
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        descripcion = request.form.get('descripcion', '').strip()
+        precio = request.form.get('precio', '').strip()
+        stock = request.form.get('stock', '').strip()
+        activo = request.form.get('activo', '1').strip()
 
-        cursor.execute("""
-        INSERT INTO productos(nombre,precio,stock,descripcion)
-        VALUES (%s,%s,%s,%s)
-        """,(nombre,precio,stock,descripcion))
+        errores = []
 
-        conexion.commit()
-        conexion.close()
+        if not nombre or len(nombre) < 2:
+            errores.append("El nombre es obligatorio (mínimo 2 caracteres).")
 
-        return redirect("/productos")
+        try:
+            precio_f = float(precio)
+            if precio_f < 0:
+                errores.append("El precio no puede ser negativo.")
+        except:
+            errores.append("Precio inválido.")
 
-    return render_template("agregar_producto.html")
+        try:
+            stock_i = int(stock) if stock != '' else 0
+            if stock_i < 0:
+                errores.append("El stock no puede ser negativo.")
+        except:
+            errores.append("Stock inválido.")
 
-# ---------------- ELIMINAR ----------------
-@app.route("/eliminar/<int:id>")
-def eliminar(id):
+        activo_i = 1 if activo == '1' else 0
 
-    conexion = conectar_db()
-    cursor = conexion.cursor()
+        if errores:
+            for e in errores:
+                flash(e, 'danger')
+            return redirect(url_for('productos_nuevo'))
 
-    cursor.execute("DELETE FROM productos WHERE id=%s",(id,))
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO productos (nombre, descripcion, precio, stock, activo, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (nombre, descripcion, precio_f, stock_i, activo_i,
+                  datetime.now().isoformat(sep=' ', timespec='seconds')))
+            conn.commit()
+            conn.close()
 
-    conexion.commit()
-    conexion.close()
+            flash("Producto creado correctamente ✅", "success")
+            return redirect(url_for('productos_list'))
+        except Exception as e:
+            flash(f"Error al crear producto: {str(e)}", "danger")
+            return redirect(url_for('productos_nuevo'))
 
-    return redirect("/productos")
+    return render_template('producto_form.html', modo='nuevo', producto=None)
 
-# ---------------- EDITAR ----------------
-@app.route("/editar/<int:id>", methods=["GET","POST"])
-def editar(id):
+# ==================== PRODUCTOS (EDITAR) ====================
+@app.route('/productos/<int:producto_id>/editar', methods=['GET', 'POST'])
+def productos_editar(producto_id):
+    if not require_login():
+        return redirect(url_for('login'))
 
-    conexion = conectar_db()
-    cursor = conexion.cursor()
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM productos WHERE id = ?", (producto_id,))
+        producto = cur.fetchone()
 
-    if request.method == "POST":
+        if not producto:
+            conn.close()
+            flash("Producto no encontrado", "warning")
+            return redirect(url_for('productos_list'))
 
-        nombre = request.form["nombre"]
-        precio = request.form["precio"]
-        stock = request.form["stock"]
-        descripcion = request.form["descripcion"]
+        if request.method == 'POST':
+            nombre = request.form.get('nombre', '').strip()
+            descripcion = request.form.get('descripcion', '').strip()
+            precio = request.form.get('precio', '').strip()
+            stock = request.form.get('stock', '').strip()
+            activo = request.form.get('activo', '1').strip()
 
-        cursor.execute("""
-        UPDATE productos
-        SET nombre=%s, precio=%s, stock=%s, descripcion=%s
-        WHERE id=%s
-        """,(nombre,precio,stock,descripcion,id))
+            errores = []
 
-        conexion.commit()
-        conexion.close()
+            if not nombre or len(nombre) < 2:
+                errores.append("El nombre es obligatorio (mínimo 2 caracteres).")
 
-        return redirect("/productos")
+            try:
+                precio_f = float(precio)
+                if precio_f < 0:
+                    errores.append("El precio no puede ser negativo.")
+            except:
+                errores.append("Precio inválido.")
 
-    cursor.execute("SELECT * FROM productos WHERE id=%s",(id,))
-    producto = cursor.fetchone()
+            try:
+                stock_i = int(stock) if stock != '' else 0
+                if stock_i < 0:
+                    errores.append("El stock no puede ser negativo.")
+            except:
+                errores.append("Stock inválido.")
 
-    conexion.close()
+            activo_i = 1 if activo == '1' else 0
 
-    return render_template("editar_producto.html", producto=producto)
+            if errores:
+                conn.close()
+                for e in errores:
+                    flash(e, 'danger')
+                return redirect(url_for('productos_editar', producto_id=producto_id))
 
+            cur.execute("""
+                UPDATE productos
+                SET nombre=?, descripcion=?, precio=?, stock=?, activo=?, updated_at=?
+                WHERE id=?
+            """, (nombre, descripcion, precio_f, stock_i, activo_i,
+                  datetime.now().isoformat(sep=' ', timespec='seconds'),
+                  producto_id))
+            conn.commit()
+            conn.close()
 
-if __name__ == "__main__":
-    app.run(debug=True)
+            flash("Producto actualizado correctamente ✅", "success")
+            return redirect(url_for('productos_list'))
+
+        conn.close()
+        return render_template('producto_form.html', modo='editar', producto=producto)
+
+    except Exception as e:
+        flash(f"Error cargando producto: {str(e)}", "danger")
+        return redirect(url_for('productos_list'))
+
+# ==================== PRODUCTOS (ELIMINAR) ====================
+@app.route('/productos/<int:producto_id>/eliminar', methods=['POST'])
+def productos_eliminar(producto_id):
+    if not require_login():
+        return redirect(url_for('login'))
+
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM productos WHERE id=?", (producto_id,))
+        conn.commit()
+        conn.close()
+        flash("Producto eliminado 🗑️", "info")
+    except Exception as e:
+        flash(f"Error al eliminar: {str(e)}", "danger")
+
+    return redirect(url_for('productos_list'))
+
+# ==================== MAIN ====================
+if __name__ == '__main__':
+    if not os.path.exists('templates'):
+        os.makedirs('templates')
+    app.run(debug=True, port=5000)
